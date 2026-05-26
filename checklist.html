@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checklist Mod.22 IRC 2025 · Dafilgest</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #f0f4f8; font-size: 13px; }
+
+.header {
+  background: #1e3a5f; color: white; padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 10;
+}
+.header h1 { font-size: 14px; font-weight: 700; }
+.header-right { display: flex; align-items: center; gap: 12px; font-size: 12px; }
+.contador { background: rgba(255,255,255,.15); border-radius: 20px; padding: 4px 12px; }
+.contador span { color: #fbbf24; font-weight: 700; font-size: 15px; }
+.sync { font-size: 11px; color: rgba(255,255,255,.6); }
+.sync.ok { color: #86efac; }
+.sync.err { color: #fca5a5; }
+
+.progress-wrap { background: #1e3a5f; padding: 0 16px 10px; }
+.progress-bar { background: rgba(255,255,255,.2); border-radius: 10px; height: 6px; }
+.progress-fill { background: #22c55e; height: 100%; border-radius: 10px; transition: width .4s; }
+
+.toolbar { padding: 8px 12px; background: white; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: center; }
+.toolbar input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 10px; font-size: 12px; flex: 1; outline: none; }
+.toolbar input:focus { border-color: #1e3a5f; }
+.btn-reset { background: none; border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 10px; font-size: 11px; color: #64748b; cursor: pointer; white-space: nowrap; }
+.btn-reset:hover { border-color: #e05050; color: #e05050; }
+
+.lista { padding: 8px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+
+.empresa {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 7px;
+  background: white; border: 1.5px solid #e2e8f0;
+  cursor: pointer; transition: all .15s; user-select: none;
+}
+.empresa:hover { border-color: #1e3a5f; background: #f8fafc; }
+.empresa.feita { background: #f0fdf4; border-color: #86efac; }
+.empresa.feita .nome { text-decoration: line-through; color: #6b7280; }
+.empresa.feita .nif { color: #86efac; }
+
+.check {
+  width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0;
+  border: 2px solid #cbd5e1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; transition: all .15s;
+}
+.empresa.feita .check { background: #22c55e; border-color: #22c55e; color: white; }
+
+.nome { font-size: 12px; font-weight: 500; color: #1e293b; line-height: 1.3; flex: 1; }
+.nif { font-size: 10px; color: #94a3b8; font-family: monospace; flex-shrink: 0; }
+
+.loading { text-align: center; padding: 40px; color: #64748b; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>✅ Checklist · Mod. 22 IRC 2025</h1>
+  <div class="header-right">
+    <div class="contador">Enviadas: <span id="cnt-feitas">0</span> / <span id="cnt-total">0</span></div>
+    <span class="sync" id="sync-status">⏳ A ligar...</span>
+    <button class="btn-reset" onclick="resetar()">🗑 Limpar</button>
+  </div>
+</div>
+<div class="progress-wrap">
+  <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+</div>
+<div class="toolbar">
+  <input type="text" id="pesquisa" placeholder="🔍 Pesquisar empresa..." oninput="filtrar()">
+</div>
+<div id="lista" class="lista"><div class="loading">A carregar dados...</div></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getDatabase, ref, set, onValue } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+const app = initializeApp({
+  apiKey: "AIzaSyBa_xVkswVw3KNdM_lPwJ4YwyyJmvEBGrc",
+  authDomain: "dafilgest-declaracoes.firebaseapp.com",
+  databaseURL: "https://dafilgest-declaracoes-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "dafilgest-declaracoes",
+  storageBucket: "dafilgest-declaracoes.appspot.com",
+  messagingSenderId: "626852328164",
+  appId: "1:626852328164:web:fb1848042e65300ee732f1"
+});
+const db = getDatabase(app);
+const FBREF = ref(db, 'checklist/mod22/2025');
+
+const EMPRESAS = [
+  {n:"1966 A EVOLUÇÃO DO PARQUET UNIPESSOAL, LDA.",nif:"517502070"},
+  {n:"ACOLHINICIATIVA UNIPESSOAL LDA",nif:"518195902"},
+  {n:"ALBINO RICARDO CARVALHO UNIPESSOAL, LDA",nif:"509309127"},
+  {n:"ALCANCEPOPEIA, SA",nif:"510401503"},
+  {n:"ALESCKDOOM UNIPESSOAL,LDA",nif:"507620178"},
+  {n:"AMANDIA FERNANDES UNIPESSOAL, LDA",nif:"513357360"},
+  {n:"ANDRÉ RIBAS RIBEIRO UNIPESSOAL, LDA.",nif:"513835873"},
+  {n:"ARMINDO MARTINS OLIVEIRA, LDA",nif:"505490633"},
+  {n:"AROMA ASSIDUO LAVANDARIAS SELF SERV.LDA.",nif:"515923613"},
+  {n:"ASSOCIAÇÃO DE ARTESÕES",nif:"510692095"},
+  {n:"ASSOCIAÇÃO DE PAIS ENCARREGADOS DE EDUCAÇÃO JI CAMPO DA VINHA",nif:"506223434"},
+  {n:"ASSOCIAÇÃO DE PAIS JI DE S.JOÃO",nif:"506844226"},
+  {n:"ASSOCIAÇÃO MUSICAL FAMILIA PEIXOTO",nif:"508253187"},
+  {n:"ASSOCIAÇÃO SOSHINKAI",nif:"508558247"},
+  {n:"BOMBOS GEMEOS",nif:"509349706"},
+  {n:"CALCULO VIBRANTE UNIPESSOAL,LDA",nif:"510360858"},
+  {n:"CARLOS SILVA & RUI SILVA - CONSTRUÇÕES E REMODELAÇÕES LDA",nif:"518928560"},
+  {n:"CASUAL E BREVE CONSTRUÇÕES UNIPESSOAL,LDA",nif:"515279293"},
+  {n:"CONQUISTA CONVICTA IMOBILIÁRIA LDA",nif:"518017230"},
+  {n:"CONSTROVIZELA LDA",nif:"508041210"},
+  {n:"CONSTRUÇÕES PEDRO VAZ FERREIRA LDA",nif:"505102498"},
+  {n:"CRISTINA MOITA UNIPESSOAL, LDA.",nif:"518124665"},
+  {n:"DAFILGEST – GABINETE DE CONTABILIDADE, UNIPESSOAL, LDA",nif:"505403447"},
+  {n:"DALILA FERNANDES MACHADO UNIPESSOAL, LDA",nif:"513121587"},
+  {n:"DIAMANTINO COSTA ALONSO LDA",nif:"513074805"},
+  {n:"DIGNIDADE GARRIDA TRANSPORTES UNIPESSOAL LDA",nif:"518242226"},
+  {n:"DOCE FORUM UNIPESSOAL, LDA",nif:"510247717"},
+  {n:"ENJOY VIEW GESTÃO E ADMINISTRAÇÃO DE BENS S A",nif:"513033556"},
+  {n:"EXTRURECICLA,LDA.",nif:"517302470"},
+  {n:"FANVICLIMA- INSTALAÇÕES DE CLIMATIZAÇÕES, LDA",nif:"504518879"},
+  {n:"FERNANDO BRÁS MARTINS UNIPESSOAL, LDA",nif:"513363696"},
+  {n:"FEYDOM SOFA SYSTEMS UNIPESSOAL LDA",nif:"517260255"},
+  {n:"FILIPE SILVA LOPES UNIPESSOAL, LDA",nif:"513360212"},
+  {n:"FRANCISCO DANIEL PEDROSA DA SILVA UNIPESSOAL LDA.",nif:"518529347"},
+  {n:"H.C ARAUJO, COMERCIO DE MATERIAL INFORMATICO MOBILIARIO E ACESSORIOS, LDA",nif:"506027104"},
+  {n:"HELDER CARNEIRO UNIPESSOAL, LDA",nif:"510397859"},
+  {n:"JOAQUIM CUNHA FARIA UNIPESSOAL LDA.",nif:"513030425"},
+  {n:"JOAQUIM DAVID ABREU UNIPESSOAL, LDA",nif:"510513719"},
+  {n:"JP INOVAÇÕES UNIPESSOAL LDA",nif:"518373312"},
+  {n:"LUCILIA MAGALHÃES UNIPESSOAL,LDA",nif:"513257845"},
+  {n:"LUIS MANUEL COSTA UNIPESSOAL,LDA",nif:"509842054"},
+  {n:"MANUEL COSTA & FILHOS LDA.",nif:"502217677"},
+  {n:"MARIA MACHADO ALMEIDA UNIPESSOAL, LDA",nif:"510557759"},
+  {n:"MAURA MARLENE FERREIRA SILVA UNIPESSOAL, LDA",nif:"513415076"},
+  {n:"MCV - MOTOCLUBE VIZELA",nif:"506327698"},
+  {n:"MENDES DE FREITAS, LDA",nif:"507209710"},
+  {n:"MÉRITO INALTERÁVEL, LDA",nif:"513659099"},
+  {n:"MOTIVOS UNIVERSAIS UNIPESSOAL,LDA",nif:"517110008"},
+  {n:"NOTAS ELEGANTES, LDA",nif:"509646344"},
+  {n:"ORIGINAL FLAME, LDA",nif:"517384825"},
+  {n:"PAULO JORGE FELIX UNIPESSOAL LDA",nif:"515473154"},
+  {n:"PEDRO ABREU - MATERIAIS DE CONSTRUÇÃO, UNIPESSOAL LDA",nif:"510937330"},
+  {n:"PORTAL FUCHSIA UNIPESSOAL LDA.",nif:"510102662"},
+  {n:"POSTURA DE FADA UNIPESSOAL,LDA",nif:"514857501"},
+  {n:"RANCHO FOLCLORICO PENACOVA",nif:"502727390"},
+  {n:"RICARDO MENDES FERNANDES, UNIPESSOAL, LDA",nif:"514263890"},
+  {n:"SOCIEDADE AGRICOLA SOCALCOS DE TRESOURAS LDA",nif:"513713182"},
+  {n:"SPORTCALÇAR UNIPESSOAL LDA",nif:"517437538"},
+  {n:"SUPERMERCADOS VILELA, LDA",nif:"507550200"},
+  {n:"SUSTENTATEORIA UNIPESSOAL,LDA",nif:"514971509"},
+  {n:"TC MENDES TEXTIL, LDA",nif:"514182628"},
+  {n:"TEIXEIRA DOS SANTOS & CARNEIRO, LDA",nif:"515126136"},
+  {n:"URBOOST CREATIVE SOLUTIONS, LDA",nif:"516152467"},
+  {n:"VENGON PRECISION ENGINEERING, UNIPESSOAL, LDA.",nif:"519289129"},
+  {n:"WELCOME GENIALITY UNIPESSOAL, LDA",nif:"515100803"},
+];
+
+let estado = {};
+
+function syncStatus(msg, cls) {
+  const el = document.getElementById('sync-status');
+  el.textContent = msg; el.className = 'sync ' + (cls||'');
+}
+
+function atualizar() {
+  const feitas = EMPRESAS.filter(e => estado[e.nif]).length;
+  const total = EMPRESAS.length;
+  document.getElementById('cnt-feitas').textContent = feitas;
+  document.getElementById('cnt-total').textContent = total;
+  document.getElementById('prog-fill').style.width = Math.round(feitas/total*100) + '%';
+}
+
+function render() {
+  const lista = document.getElementById('lista');
+  lista.innerHTML = EMPRESAS.map((e, i) => `
+    <div class="empresa ${estado[e.nif]?'feita':''}" data-i="${i}" data-nome="${e.n.toLowerCase()}" data-nif="${e.nif}" onclick="window.toggle(${i})">
+      <div class="check">${estado[e.nif]?'✓':''}</div>
+      <div class="nome">${e.n}</div>
+      <div class="nif">${e.nif}</div>
+    </div>
+  `).join('');
+  atualizar();
+}
+
+window.toggle = function(i) {
+  const nif = EMPRESAS[i].nif;
+  estado[nif] = !estado[nif];
+  const el = document.querySelector(`.empresa[data-i="${i}"]`);
+  el.classList.toggle('feita', estado[nif]);
+  el.querySelector('.check').textContent = estado[nif] ? '✓' : '';
+  atualizar();
+  syncStatus('A guardar...', '');
+  set(FBREF, estado)
+    .then(() => syncStatus('✓ Guardado', 'ok'))
+    .catch(() => syncStatus('⚠ Erro ao guardar', 'err'));
+};
+
+window.filtrar = function() {
+  const q = document.getElementById('pesquisa').value.toLowerCase();
+  document.querySelectorAll('.empresa').forEach(el => {
+    const ok = !q || el.dataset.nome.includes(q) || el.dataset.nif.includes(q);
+    el.style.display = ok ? '' : 'none';
+  });
+};
+
+window.resetar = function() {
+  if (!confirm('Apagar todo o progresso?')) return;
+  estado = {};
+  set(FBREF, estado).then(() => { render(); syncStatus('✓ Limpo', 'ok'); });
+};
+
+// Carregar do Firebase em tempo real
+onValue(FBREF, snap => {
+  estado = snap.val() || {};
+  render();
+  syncStatus('✓ Ligado', 'ok');
+}, err => {
+  syncStatus('⚠ Sem ligação', 'err');
+  render();
+});
+</script>
+</body>
+</html>
