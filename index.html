@@ -1153,18 +1153,27 @@ window.verPDF = function(tipo, nif) {
   const cache = tipo === 'mod22' ? mod22Cache : iesCache;
   const campo = tipo === 'mod22' ? 'pdfMod22' : 'pdfIES';
   const d = cache[nif];
-  if (!d || !d[campo]) { toast('PDF não encontrado!', 'error'); return; }
-  // Converter base64 para Blob e abrir via URL de objeto (não bloqueado por popups)
-  const base64 = d[campo].split(',')[1] || d[campo];
-  const bytes = atob(base64);
-  const arr = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-  const blob = new Blob([arr], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  if (!d) { toast('Registo não encontrado no cache!', 'error'); return; }
+  if (!d[campo]) { toast('Campo PDF não existe no registo!', 'error'); return; }
+  try {
+    const raw = d[campo];
+    const commaIdx = raw.indexOf(',');
+    const base64 = commaIdx >= 0 ? raw.slice(commaIdx + 1) : raw;
+    if (!base64 || base64.length < 100) { toast('PDF vazio ou inválido (tamanho: ' + (base64?.length||0) + ')', 'error'); return; }
+    const bytes = atob(base64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch(err) {
+    toast('Erro ao abrir PDF: ' + err.message, 'error');
+  }
 };
 
 window.apagarPDF = async function(tipo, nif) {
