@@ -1154,8 +1154,17 @@ window.verPDF = function(tipo, nif) {
   const campo = tipo === 'mod22' ? 'pdfMod22' : 'pdfIES';
   const d = cache[nif];
   if (!d || !d[campo]) { toast('PDF não encontrado!', 'error'); return; }
-  const win = window.open('', '_blank');
-  win.document.write(`<html><head><title>${d[campo+'Nome']||'Declaração'}</title></head><body style="margin:0"><embed src="${d[campo]}" type="application/pdf" width="100%" height="100%"></body></html>`);
+  // Converter base64 para Blob e abrir via URL de objeto (não bloqueado por popups)
+  const base64 = d[campo].split(',')[1] || d[campo];
+  const bytes = atob(base64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  const blob = new Blob([arr], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
 
 window.apagarPDF = async function(tipo, nif) {
